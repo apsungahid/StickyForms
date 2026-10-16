@@ -1,0 +1,16 @@
+# Optional: a local PostgreSQL for when you're ready to move off SQLite.
+# Start with:  docker compose up -d
+# Then set DB_CLIENT=pg and DATABASE_URL in .env, run `npm install pg`, and `npm run setup`.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: stickyforms
+      POSTGRES_PASSWORD: stickyforms
+      POSTGRES_DB: stickyforms
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:

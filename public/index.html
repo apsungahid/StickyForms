@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StickyForms</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <h1>StickyForms</h1>
+    <div class="user-menu" id="user-menu" hidden>
+      <span id="user-pic"></span>
+      <span><b id="user-name"></b><br><small class="muted" id="user-email"></small></span>
+      <button id="sign-out">Sign out</button>
+    </div>
+  </header>
+  <main class="layout">
+    <aside class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Forms</h2>
+        <button class="primary" id="new-form">+ New</button>
+      </div>
+      <div class="side-tabs" role="tablist">
+        <button role="tab" id="side-mine" class="active" aria-selected="true">My forms</button>
+        <button role="tab" id="side-inv" aria-selected="false">Sent to me <span class="tab-count" id="inv-count">0</span></button>
+      </div>
+      <div id="side-mine-panel">
+      <div class="form-search">
+        <input type="search" id="form-search" placeholder="Search forms…" aria-label="Search forms" autocomplete="off">
+        <small class="muted" id="form-search-info"></small>
+      </div>
+      <ul class="form-list" id="form-list"><li class="muted">Loading…</li></ul>
+      </div>
+      <div id="side-inv-panel" hidden>
+        <p class="muted" style="font-size:13px;margin:10px 0 0">Forms that were sent to <b id="inv-email"></b>.</p>
+        <ul class="inv-list" id="inv-list"></ul>
+      </div>
+    </aside>
+    <section id="detail">
+      <div class="card muted">Select a form or create a new one.</div>
+    </section>
+  </main>
+  <script src="/admin.js"></script>
+</body>
+</html>

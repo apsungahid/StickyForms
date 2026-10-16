@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · StickyForms</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="login-page">
+  <main class="login-wrap">
+    <div class="card login-card">
+      <div class="login-brand">StickyForms</div>
+      <h1>Sign in</h1>
+      <p class="muted">Create forms, send personal links and see the forms that were sent to you.</p>
+      <div id="g-btn" class="g-btn"></div>
+      <div id="login-msg" class="error" role="alert"></div>
+      <div id="dev-login" hidden>
+        <div class="divider"><span>Local testing</span></div>
+        <form id="dev-form" class="row">
+          <input id="dev-email" type="email" placeholder="you@example.com" required style="flex:1;min-width:180px">
+          <button class="btn" type="submit">Developer sign-in</button>
+        </form>
+        <small class="muted">Shown only on this computer because DEV_LOGIN=true. Turn it off before going online.</small>
+      </div>
+      <p class="muted login-foot">Received a form link? You don't need an account — just open the link from your email.</p>
+    </div>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>
