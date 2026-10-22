@@ -14,6 +14,7 @@ const archiver = require('archiver');
 const { tally, answerText } = require('../results');
 
 const router = express.Router();
+const { detectPosterType, POSTER_MAX_MB, sendPoster } = require('../poster');
 
 const serializeForm = (row, extra = {}) => ({
   id: row.id,
@@ -24,6 +25,8 @@ const serializeForm = (row, extra = {}) => ({
   updatedAt: toIso(row.updated_at),
   locked: Boolean(row.locked_at),
   lockedAt: toIso(row.locked_at),
+  // ?v= changes whenever the poster is replaced, so browsers don't show a stale cached image.
+  posterUrl: row.poster_path ? `/api/forms/${row.id}/poster?v=${encodeURIComponent(toIso(row.poster_updated_at) || '')}` : null,
   ...extra,
 });
 
@@ -149,9 +152,45 @@ router.post('/:id/duplicate', loadForm, async (req, res) => {
     created_at: now,
     updated_at: now,
   };
+  if (src.poster_path) { // the copy gets its own copy of the poster image
+    try {
+      row.poster_path = await storage.copyPoster(src.poster_path, row.id);
+      row.poster_type = src.poster_type;
+      row.poster_updated_at = now;
+    } catch { /* original poster file missing: copy without a poster */ }
+  }
   await db('forms').insert({ ...row, owner_id: req.user.id });
   res.status(201).json(serializeForm(row));
 });
+
+// ---------- Poster image ----------
+// Raw image body (Content-Type image/*). JPG, PNG, GIF or WebP, checked by the file's contents, not its name.
+router.put(
+  '/:id/poster',
+  express.raw({ type: () => true, limit: `${POSTER_MAX_MB + 1}mb` }),
+  loadForm,
+  async (req, res) => {
+    const buf = req.body;
+    if (!Buffer.isBuffer(buf) || !buf.length) return res.status(400).json({ error: 'No image received' });
+    if (buf.length > POSTER_MAX_MB * 1024 * 1024) return res.status(413).json({ error: `The poster image is too large (max ${POSTER_MAX_MB} MB).` });
+    const type = detectPosterType(buf);
+    if (!type) return res.status(400).json({ error: 'The poster must be a JPG, PNG, GIF or WebP image.' });
+    const rel = await storage.writePoster(req.params.id, buf, type.ext);
+    const changes = { poster_path: rel, poster_type: type.mime, poster_updated_at: new Date().toISOString() };
+    await db('forms').where({ id: req.params.id }).update(changes);
+    if (req.formRow.poster_path) await storage.removeFile(req.formRow.poster_path);
+    res.json(serializeForm({ ...req.formRow, ...changes }));
+  },
+);
+
+router.delete('/:id/poster', loadForm, async (req, res) => {
+  const changes = { poster_path: null, poster_type: null, poster_updated_at: null };
+  await db('forms').where({ id: req.params.id }).update(changes);
+  await storage.removeFile(req.formRow.poster_path);
+  res.json(serializeForm({ ...req.formRow, ...changes }));
+});
+
+router.get('/:id/poster', loadForm, (req, res) => sendPoster(res, req.formRow));
 
 // Lock = temporarily refuse new submissions on every link. Unlock = links work again (unless expired/used).
 router.post('/:id/lock', loadForm, async (req, res) => {

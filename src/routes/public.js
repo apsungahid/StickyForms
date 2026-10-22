@@ -8,6 +8,11 @@ const { tally } = require('../results');
 const { validateSubmission } = require('../validation');
 const storage = require('../storage');
 const config = require('../config');
+const { sendPoster } = require('../poster');
+
+// Poster image URL for this link (null when the form has none).
+const posterUrl = (token, form) => (form.poster_path
+  ? `/api/public/${encodeURIComponent(token)}/poster?v=${encodeURIComponent(toIso(form.poster_updated_at) || '')}` : null);
 
 const router = express.Router();
 
@@ -42,6 +47,7 @@ async function viewPayload(link, form) {
     mode: 'view',
     title: form.title,
     description: form.description,
+    posterUrl: posterUrl(link.token, form),
     recipientName: link.recipient_name,
     canSubmitAgain: !isExpired(link) && !isUsedUp(link) && !form.locked_at,
     submissions: mine.map((s) => {
@@ -80,9 +86,18 @@ router.get('/:token', async (req, res) => {
     mode: 'form',
     title: form.title,
     description: form.description,
+    posterUrl: posterUrl(link.token, form),
     fields: parseJson(form.fields, []),
     recipientName: link.recipient_name,
   });
+});
+
+// The form's poster image, for anyone holding a (not replaced) link to it.
+router.get('/:token/poster', async (req, res) => {
+  const link = await db('links').where({ token: req.params.token }).first();
+  if (!link || link.replaced_by) return res.status(404).json({ error: 'Not found' });
+  const form = await db('forms').where({ id: link.form_id }).first();
+  sendPoster(res, form);
 });
 
 // The person's own submission(s) for this link — shown right after submitting.

@@ -788,3 +788,61 @@ test('requests from another website are blocked', async () => {
   await api.post('/api/forms').set('Origin', 'https://evil.example').send(uniq(sampleForm)).expect(403);
   await api.post('/api/forms').set('Origin', `http://${'127.0.0.1'}`).send(uniq(sampleForm)).expect((r) => assert.notEqual(r.status, 201));
 });
+
+// ---------- Poster image ----------
+const PNG_1PX = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8cfc0f01f0005000201a5f1d6a60000000049454e44ae426082', 'hex');
+
+test('poster image: upload, show on the link, replace, duplicate, remove', async () => {
+  const form = (await api.post('/api/forms').send(uniq(sampleForm)).expect(201)).body;
+  assert.equal(form.posterUrl, null);
+
+  // Not an image (even if it says so) is refused
+  await api.put(`/api/forms/${form.id}/poster`).set('Content-Type', 'image/png').send(Buffer.from('MZ this is not a picture at all')).expect(400);
+  await api.put(`/api/forms/${form.id}/poster`).set('Content-Type', 'image/png').send(Buffer.alloc(0)).expect(400);
+  // Too large
+  const big = Buffer.concat([PNG_1PX, Buffer.alloc(5 * 1024 * 1024)]);
+  await api.put(`/api/forms/${form.id}/poster`).set('Content-Type', 'image/png').send(big).expect(413);
+
+  const up = (await api.put(`/api/forms/${form.id}/poster`).set('Content-Type', 'image/png').send(PNG_1PX).expect(200)).body;
+  assert.match(up.posterUrl, new RegExp(`^/api/forms/${form.id}/poster\\?v=`));
+  const img = await api.get(up.posterUrl).expect(200);
+  assert.equal(img.headers['content-type'], 'image/png');
+  assert.equal(img.headers['x-content-type-options'], 'nosniff');
+
+  // Recipients see it through their link, without signing in
+  const link = (await api.post(`/api/forms/${form.id}/links`).send({ recipientName: 'Pia' }).expect(201)).body;
+  const pub = (await request(app).get(`/api/public/${link.token}`).expect(200)).body;
+  assert.match(pub.posterUrl, new RegExp(`^/api/public/${link.token}/poster\\?v=`));
+  await request(app).get(pub.posterUrl).expect(200).expect('Content-Type', 'image/png');
+  await request(app).get('/api/public/nope/poster').expect(404);
+  // ...but other people can't fetch it from the admin URL
+  await request(app).get(up.posterUrl).expect(401);
+
+  // Replacing deletes the old file
+  const fs = require('fs');
+  const oldPath = require('path').join(process.env.UPLOAD_DIR, (await db('forms').where({ id: form.id }).first()).poster_path);
+  assert.ok(fs.existsSync(oldPath));
+  const gif = Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(20)]);
+  const rep = (await api.put(`/api/forms/${form.id}/poster`).set('Content-Type', 'image/gif').send(gif).expect(200)).body;
+  assert.notEqual(rep.posterUrl, up.posterUrl);
+  assert.ok(!fs.existsSync(oldPath));
+  await api.get(rep.posterUrl).expect(200).expect('Content-Type', 'image/gif');
+
+  // Editing the form keeps the poster; a duplicate gets its own copy
+  const edited = (await api.put(`/api/forms/${form.id}`).send({ ...sampleForm, title: form.title + ' edited' }).expect(200)).body;
+  assert.ok(edited.posterUrl);
+  const copy = (await api.post(`/api/forms/${form.id}/duplicate`).send({ title: form.title + ' copy' }).expect(201)).body;
+  assert.match(copy.posterUrl, new RegExp(`^/api/forms/${copy.id}/poster`));
+  await api.get(copy.posterUrl).expect(200).expect('Content-Type', 'image/gif');
+
+  // Remove
+  const removed = (await api.delete(`/api/forms/${form.id}/poster`).expect(200)).body;
+  assert.equal(removed.posterUrl, null);
+  await request(app).get(`/api/public/${link.token}/poster`).expect(404);
+  assert.equal((await request(app).get(`/api/public/${link.token}`).expect(200)).body.posterUrl, null);
+  await api.get(copy.posterUrl).expect(200); // the copy keeps its own
+
+  // Deleting the copy removes its poster folder
+  await api.delete(`/api/forms/${copy.id}`).expect(204);
+  assert.ok(!fs.existsSync(require('path').join(process.env.UPLOAD_DIR, copy.id)));
+});

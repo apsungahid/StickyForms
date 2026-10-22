@@ -178,3 +178,14 @@ a.thumb:hover img { transform: scale(1.06); }
 .empty-icon { font-size: 40px; line-height: 1; }
 table.inv-table td { vertical-align: middle; }
 table.inv-table td:last-child { white-space: nowrap; }
+
+/* Poster image */
+.poster-edit { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 8px; }
+.poster-box { width: 160px; height: 120px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; }
+.poster-box.empty { border-style: dashed; font-size: 13px; }
+.poster-box img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.poster-thumb { display: inline-block; margin-top: 4px; }
+.poster-thumb img { display: block; max-width: 220px; max-height: 140px; border-radius: 8px; border: 1px solid var(--border); object-fit: contain; background: var(--bg); }
+.fill .poster { display: block; margin: -4px 0 16px; }
+.fill .poster img { display: block; width: 100%; height: auto; max-height: 75vh; object-fit: contain; border-radius: 10px; background: var(--bg); }
+label.btn { display: inline-block; font-weight: 400; }

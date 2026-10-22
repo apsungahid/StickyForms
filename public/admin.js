@@ -417,6 +417,17 @@ function readField(r) {
   return field;
 }
 
+const POSTER_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const POSTER_MAX_MB = 5;
+
+async function uploadPoster(formId, file) {
+  const res = await fetch(`/api/forms/${formId}/poster`, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+  if (res.status === 401) { location.href = '/login'; throw new Error('Please sign in'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
 function showBuilder(form) {
   const editing = Boolean(form);
   builderDirty = false;
@@ -425,6 +436,19 @@ function showBuilder(form) {
       <h2>${editing ? 'Edit form' : 'New form'}</h2>
       <label>Title</label><input id="b-title" value="${esc(form?.title)}">
       <label>Description</label><textarea id="b-desc">${esc(form?.description)}</textarea>
+      <label for="b-poster">Poster image <small class="muted" style="font-weight:400">· optional, shown at the top of the form</small></label>
+      <div class="poster-edit">
+        <div class="poster-box" id="b-poster-box"></div>
+        <div>
+          <div class="row">
+            <label class="btn" style="margin:0"><span id="b-poster-pick">Choose image…</span>
+              <input type="file" id="b-poster" accept="${POSTER_TYPES.join(',')}" hidden></label>
+            <button type="button" id="b-poster-remove" hidden>Remove</button>
+          </div>
+          <small class="muted">JPG, PNG, GIF or WebP · up to ${POSTER_MAX_MB} MB</small>
+          <div class="error" id="b-poster-err"></div>
+        </div>
+      </div>
       <h3>Fields</h3>
       <div class="field-head">
         <span title="Order of the field in the form">#</span>
@@ -442,6 +466,38 @@ function showBuilder(form) {
         <button id="b-cancel">Cancel</button>
       </div>
     </div>`;
+  // Poster: kept in the browser until "Save", then uploaded (a new form needs its id first).
+  let posterFile = null; // new image chosen
+  let posterRemoved = false; // existing poster to delete on save
+  let posterPreview = null;
+  const drawPoster = () => {
+    const src = posterFile ? posterPreview : (!posterRemoved && form?.posterUrl) || null;
+    $('#b-poster-box').innerHTML = src ? `<img src="${esc(src)}" alt="Poster preview">` : '<span class="muted">No poster</span>';
+    $('#b-poster-box').classList.toggle('empty', !src);
+    $('#b-poster-remove').hidden = !src;
+    $('#b-poster-pick').textContent = src ? 'Change image…' : 'Choose image…';
+  };
+  $('#b-poster').onchange = (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    $('#b-poster-err').textContent = '';
+    if (!file) return;
+    if (!POSTER_TYPES.includes(file.type)) { $('#b-poster-err').textContent = 'Please choose a JPG, PNG, GIF or WebP image.'; return; }
+    if (file.size > POSTER_MAX_MB * 1024 * 1024) { $('#b-poster-err').textContent = `That image is too large (max ${POSTER_MAX_MB} MB).`; return; }
+    if (posterPreview) URL.revokeObjectURL(posterPreview);
+    posterFile = file;
+    posterPreview = URL.createObjectURL(file);
+    builderDirty = true;
+    drawPoster();
+  };
+  $('#b-poster-remove').onclick = () => {
+    if (posterFile) { posterFile = null; URL.revokeObjectURL(posterPreview); posterPreview = null; }
+    else posterRemoved = true;
+    builderDirty = true;
+    drawPoster();
+  };
+  drawPoster();
+
   const wrap = $('#b-fields');
   (form?.fields?.length ? form.fields : [undefined]).forEach((f) => wrap.appendChild(fieldRow(f)));
   renumberFields(wrap);
@@ -456,6 +512,12 @@ function showBuilder(form) {
     try {
       const saved = editing ? await api(`/api/forms/${form.id}`, { method: 'PUT', body }) : await api('/api/forms', { method: 'POST', body });
       builderDirty = false;
+      try {
+        if (posterFile) await uploadPoster(saved.id, posterFile);
+        else if (posterRemoved && form?.posterUrl) await api(`/api/forms/${saved.id}/poster`, { method: 'DELETE' });
+      } catch (e) {
+        alert(`The form was saved, but the poster image could not be saved: ${e.message}`);
+      }
       await showForm(saved.id);
     } catch (e) {
       $('#b-err').innerHTML = esc(e.message) + (e.details ? '<br>' + e.details.map(esc).join('<br>') : '');
@@ -472,6 +534,7 @@ async function showForm(id) {
     api(`/api/forms/${id}/results`),
   ]);
   const resultList = Object.values(results);
+  if (currentId !== id || !$('#side-inv-panel').hidden) return; // user moved on while this was loading
   loadList();
   $('#detail').innerHTML = `
     <div class="card">
@@ -480,6 +543,7 @@ async function showForm(id) {
         <div class="row"><button id="d-edit">Edit</button><button class="kebab" id="d-menu" aria-label="More actions" title="More actions">⋮</button></div>
       </div>
       <p class="muted">${esc(form.description) || 'No description'} · ${form.fields.length} fields</p>
+      ${form.posterUrl ? `<a class="poster-thumb" href="${esc(form.posterUrl)}" target="_blank" rel="noopener" title="Poster image — open full size"><img src="${esc(form.posterUrl)}" alt="Poster"></a>` : ''}
       ${form.locked ? `<div class="notice warn row" style="justify-content:space-between">
         <span><b>This form is locked</b> since ${esc(fmtDateTime(form.lockedAt))}. Recipients see that it's temporarily closed and can't submit.</span>
         <button class="primary" id="d-unlock">Unlock form</button>
@@ -993,8 +1057,9 @@ async function openSide(which) {
   showSide(which);
   $('#detail').innerHTML = '<div class="card muted">Loading…</div>';
   try {
-    if (which === 'mine') { await loadList(); await showMineDetail(); }
-    else { await loadInvitations(); showInvDetail(); }
+    // Only draw the right side if this tab is still the selected one when its data arrives.
+    if (which === 'mine') { await loadList(); if (!$('#side-mine-panel').hidden) await showMineDetail(); }
+    else { await loadInvitations(); if (!$('#side-inv-panel').hidden) showInvDetail(); }
   } catch (e) {
     $('#detail').innerHTML = `<div class="card error">${esc(e.message)}</div>`;
   }
@@ -1029,7 +1094,9 @@ function showInvDetail() {
         <div class="empty-icon" aria-hidden="true">📬</div>
         <h2>Nothing has been sent to you yet</h2>
         <p class="muted">When someone sends a form to <b>${esc($('#inv-email').textContent)}</b>, it will show up here.</p>
+        <button class="primary" id="inv-new">+ Create a new form</button>
       </div>`;
+    $('#inv-new').onclick = () => $('#new-form').click();
     return;
   }
   const fmt = (iso, withYear = true) => esc(new Date(iso).toLocaleDateString(undefined, { year: withYear ? 'numeric' : undefined, month: 'short', day: 'numeric' }));

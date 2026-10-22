@@ -53,6 +53,7 @@ src/sqlite-client.js Knex driver for Node's built-in SQLite
 src/recipients.js    Reads recipient spreadsheets (.xlsx / .csv)
 src/results.js       Poll totals and ranking averages
 src/storage.js       Saves uploaded files to disk (swap for S3/Blob later)
+src/poster.js        Poster image checks (type by content) and serving
 src/auth.js          Sign in with Google, sessions, ownership checks
 src/routes/auth.js   Sign-in API · src/routes/me.js  "Sent to me" list
 src/mailer.js        Renders and sends link emails (SMTP, or outbox in test mode)
@@ -79,6 +80,7 @@ Auth API: `GET /api/auth/config` · `POST /api/auth/google {credential}` · `POS
 Admin (`/api/forms`)
 - `GET /` list · `POST /` create · `GET /:id` · `PUT /:id` · `DELETE /:id` — form titles must be unique (case-insensitive); a clash returns 409.
 - `POST /:id/duplicate` `{title, description}` — copy the questions and email template into a new form (no recipients, links or submissions). New title required and must be unique.
+- `PUT /:id/poster` (raw image body) · `DELETE /:id/poster` · `GET /:id/poster` — optional poster image shown at the top of the form: JPG, PNG, GIF or WebP (checked by the file's contents), up to 5 MB. Stored in `UPLOAD_DIR/<formId>/poster/`; replaced posters are deleted, duplicates get their own copy, deleting the form deletes it. Recipients load it via `GET /api/public/:token/poster` (`posterUrl` in the link's form data).
 - `POST /:id/lock` · `POST /:id/unlock` — while locked, every link answers 423 "temporarily closed" and nothing can be submitted. Links and expiry dates are untouched, so unlocking makes all unexpired, unused links work again.
 - `GET /:id/links` · `POST /:id/links` `{recipientName, recipientEmail, expiresOn, maxSubmissions}`
   - `expiresOn` is a date (`YYYY-MM-DD`); the link works until the end of that day (server time zone). Omit for no expiry.

@@ -156,11 +156,16 @@ function answerHtml(a) {
   return `<span style="white-space:pre-wrap">${esc(a.value)}</span>`;
 }
 
+// Poster image at the top of the form; click to open it full size.
+const posterHtml = (info) => (info.posterUrl
+  ? `<a class="poster" href="${esc(info.posterUrl)}" target="_blank" rel="noopener" title="Open full size"><img src="${esc(info.posterUrl)}" alt="${esc(info.title)} poster"></a>` : '');
+
 function renderView(info, { justSubmitted = false } = {}) {
   document.title = info.title;
   const many = info.submissions.length > 1;
   root.innerHTML = `
     ${justSubmitted ? '<p class="success" style="margin-top:0"><b>Thank you! Your response was recorded.</b></p>' : ''}
+    ${posterHtml(info)}
     <h2>${esc(info.title)}</h2>
     <p class="muted">${info.recipientName ? `Hi ${esc(info.recipientName)}! ` : ''}${many ? `You've sent ${info.submissions.length} responses. Here they are, newest first.` : "Here's what you submitted."}</p>
     ${info.submissions.map((s, i) => `
@@ -179,6 +184,7 @@ function renderForm(info) {
   document.title = info.title;
   const saved = draft.load();
   root.innerHTML = `
+    ${posterHtml(info)}
     <h2>${esc(info.title)}</h2>
     ${info.recipientName ? `<p class="muted">Hi ${esc(info.recipientName)}!</p>` : ''}
     ${info.description ? `<p>${esc(info.description)}</p>` : ''}

@@ -29,10 +29,24 @@ async function save(tempPath, { formId, submissionId, fileId, ext }) {
   return rel;
 }
 
+// Form poster images live in <formId>/poster/ next to the form's uploads (deleted with the form).
+async function writePoster(formId, buffer, ext) {
+  const rel = path.posix.join(formId, 'poster', `${require('crypto').randomUUID()}${ext}`);
+  const dest = resolveSafe(rel);
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.writeFile(dest, buffer);
+  return rel;
+}
+async function copyPoster(rel, toFormId) {
+  const ext = path.extname(rel);
+  return writePoster(toFormId, await fs.readFile(resolveSafe(rel)), ext);
+}
+const removeFile = (rel) => (rel ? fs.rm(resolveSafe(rel), { force: true }).catch(() => {}) : Promise.resolve());
+
 const absolutePath = (rel) => resolveSafe(rel);
 const removeTemp = (paths) => Promise.all(paths.filter(Boolean).map((p) => fs.rm(p, { force: true }).catch(() => {})));
 const removeForm = (formId) => fs.rm(resolveSafe(formId), { recursive: true, force: true }).catch(() => {});
 const removeSubmissionDir = (formId, submissionId) =>
   fs.rm(resolveSafe(path.posix.join(formId, submissionId)), { recursive: true, force: true }).catch(() => {});
 
-module.exports = { ensureRoot, save, absolutePath, removeTemp, removeForm, removeSubmissionDir, tempDir: () => path.join(root(), 'tmp') };
+module.exports = { ensureRoot, save, writePoster, copyPoster, removeFile, absolutePath, removeTemp, removeForm, removeSubmissionDir, tempDir: () => path.join(root(), 'tmp') };
